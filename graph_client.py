@@ -34,6 +34,7 @@ def list_users():
     )
     r.raise_for_status()
     return r.json()["value"]
+
 def create_user(display_name, first, last, upn, department, job_title, password):
     body = {
         "accountEnabled": True,
@@ -75,3 +76,21 @@ def add_user_to_group(user_id, group_id):
         json=body,
     )
     r.raise_for_status()
+
+DEPARTMENT_GROUPS = {
+    "Sales": "Sales",
+    "IT": "IT",
+    "HR": "HR",
+    "Finance": "Finance",
+}
+
+
+def onboard_user(display_name, first, last, upn, department, job_title, password):
+    if department not in DEPARTMENT_GROUPS:
+        raise ValueError(f"Unknown department: {department}")
+
+    user = create_user(display_name, first, last, upn, department, job_title, password)
+    group_id = get_group_id(DEPARTMENT_GROUPS[department])
+    add_user_to_group(user["id"], group_id)
+    return user
+
