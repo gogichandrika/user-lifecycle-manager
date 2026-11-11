@@ -34,3 +34,44 @@ def list_users():
     )
     r.raise_for_status()
     return r.json()["value"]
+def create_user(display_name, first, last, upn, department, job_title, password):
+    body = {
+        "accountEnabled": True,
+        "displayName": display_name,
+        "givenName": first,
+        "surname": last,
+        "userPrincipalName": upn,
+        "mailNickname": upn.split("@")[0],
+        "department": department,
+        "jobTitle": job_title,
+        "passwordProfile": {
+            "forceChangePasswordNextSignIn": True,
+            "password": password,
+        },
+    }
+    r = requests.post(f"{GRAPH}/users", headers=_headers(), json=body)
+    r.raise_for_status()
+    return r.json()
+
+
+def get_group_id(group_name):
+    r = requests.get(
+        f"{GRAPH}/groups",
+        headers=_headers(),
+        params={"$filter": f"displayName eq '{group_name}'", "$select": "id,displayName"},
+    )
+    r.raise_for_status()
+    groups = r.json()["value"]
+    if not groups:
+        raise ValueError(f"Group not found: {group_name}")
+    return groups[0]["id"]
+
+
+def add_user_to_group(user_id, group_id):
+    body = {"@odata.id": f"{GRAPH}/directoryObjects/{user_id}"}
+    r = requests.post(
+        f"{GRAPH}/groups/{group_id}/members/$ref",
+        headers=_headers(),
+        json=body,
+    )
+    r.raise_for_status()
