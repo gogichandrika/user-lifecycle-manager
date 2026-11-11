@@ -94,3 +94,54 @@ def onboard_user(display_name, first, last, upn, department, job_title, password
     add_user_to_group(user["id"], group_id)
     return user
 
+def find_user(upn):
+    r = requests.get(
+        f"{GRAPH}/users/{upn}",
+        headers=_headers(),
+        params={"$select": "id,displayName,userPrincipalName,accountEnabled"},
+    )
+    if r.status_code == 404:
+        raise ValueError(f"User not found: {upn}")
+    r.raise_for_status()
+    return r.json()
+
+
+PROTECTED_UPNS = {
+    "gogi.chandrika_gmail.com#EXT#@gogichandrikagmail.onmicrosoft.com",
+}
+
+
+def disable_user(upn):
+    if upn.lower() in {p.lower() for p in PROTECTED_UPNS}:
+        raise PermissionError(f"Refusing to disable protected account: {upn}")
+
+    user = find_user(upn)
+    r = requests.patch(
+        f"{GRAPH}/users/{user['id']}",
+        headers=_headers(),
+        json={"accountEnabled": False},
+    )
+    r.raise_for_status()
+
+    # Kill active sessions so the user is signed out everywhere
+    requests.post(
+        f"{GRAPH}/users/{user['id']}/revokeSignInSessions",
+        headers=_headers(),
+    ).raise_for_status()
+    return user
+
+
+def remove_user_from_group(user_id, group_id):
+    r = requests.delete(
+        f"{GRAPH}/groups/{group_id}/members/{user_id}/$ref",
+        headers=_headers(),
+    )
+    r.raise_for_status()
+
+
+def offboard_user(upn, department):
+    user = disable_user(upn)
+    if department in DEPARTMENT_GROUPS:
+        remove_user_from_group(user["id"], get_group_id(DEPARTMENT_GROUPS[department]))
+    return user
+
