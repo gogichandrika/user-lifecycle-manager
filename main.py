@@ -2,7 +2,9 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 import requests
 
+
 from graph_client import list_users, onboard_user, offboard_user
+from database import log_action, get_logs
 
 app = FastAPI(title="User Lifecycle Manager")
 
@@ -45,23 +47,36 @@ def onboard(req: OnboardRequest):
             req.display_name, req.first_name, req.last_name,
             req.upn, req.department, req.job_title, req.password,
         )
+        log_action("onboard", req.upn, req.department, "success")
         return {"id": user["id"], "upn": user["userPrincipalName"]}
     except ValueError as e:
+        log_action("onboard", req.upn, req.department, "failed", str(e))
         raise HTTPException(status_code=400, detail=str(e))
     except requests.HTTPError as e:
-        raise graph_error(e)
+        err = graph_error(e)
+        log_action("onboard", req.upn, req.department, "failed", err.detail)
+        raise err
 
 
 @app.post("/offboard")
 def offboard(req: OffboardRequest):
     try:
         user = offboard_user(req.upn, req.department)
+        log_action("offboard", req.upn, req.department, "success")
         return {"status": "disabled", "user": user["displayName"]}
     except PermissionError as e:
+        log_action("offboard", req.upn, req.department, "failed", str(e))
         raise HTTPException(status_code=403, detail=str(e))
     except ValueError as e:
+        log_action("offboard", req.upn, req.department, "failed", str(e))
         raise HTTPException(status_code=404, detail=str(e))
     except requests.HTTPError as e:
-        raise graph_error(e)
+        err = graph_error(e)
+        log_action("offboard", req.upn, req.department, "failed", err.detail)
+        raise err
 
+
+@app.get("/audit")
+def audit(limit: int = 100):
+    return get_logs(limit)
     
