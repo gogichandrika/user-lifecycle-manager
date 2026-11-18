@@ -11,6 +11,8 @@ from pydantic import BaseModel, EmailValidator, field_validator
 from typing import Optional
 
 from database import (
+    init_db,
+    init_sample_data,
     create_employee,
     get_employee,
     get_all_employees,
@@ -24,7 +26,8 @@ from database import (
     get_audit_logs,
     Department,
     DEPARTMENT_GROUPS,
-    init_db,
+    Employee,
+    SessionLocal,
 )
 from automations import (
     validate_employee_data,
@@ -83,7 +86,7 @@ class UserSearchRequest(BaseModel):
 # ─── Authentication (simulated for demo) ──────────────────────────────
 
 
- bearer = HTTPBearer(auto_error=False)
+bearer = HTTPBearer(auto_error=False)
 
 
 def get_demo_user():
@@ -161,7 +164,6 @@ def health_check():
 
 # ─── Employee endpoints ────────────────────────────────────────────────
 
-
 @app.get("/employees")
 def list_employees(
     skip: int = 0,
@@ -169,41 +171,32 @@ def list_employees(
     user=Depends(require_roles("Admin")),
 ):
     """List all employees with pagination."""
-    with __import__("database").get_session() as db:
-        from database import SessionLocal, Employee
-        session = SessionLocal()
-        try:
-            total = session.query(Employee).count()
-            employees = (
-                session.query(Employee)
-                .order_by(Employee.created_at.desc())
-                .offset(skip)
-                .limit(limit)
-                .all()
-            )
-            return {
-                "total": total,
-                "skip": skip,
-                "limit": limit,
-                "employees": [
-                    {
-                        "id": e.id,
-                        "employee_id": e.employee_id,
-                        "upn": e.upn,
-                        "display_name": e.display_name,
-                        "first_name": e.first_name,
-                        "last_name": e.last_name,
-                        "department": e.department,
-                        "job_title": e.job_title,
-                        "account_enabled": e.account_enabled,
-                        "hire_date": e.hire_date.isoformat() if e.hire_date else None,
-                        "created_at": e.created_at.isoformat() if e.created_at else None,
-                    }
-                    for e in employees
-                ],
+
+    employees = get_all_employees()
+
+    return {
+        "total": len(employees),
+        "skip": skip,
+        "limit": limit,
+        "employees": [
+            {
+                "id": e.id,
+                "employee_id": e.employee_id,
+                "upn": e.upn,
+                "display_name": e.display_name,
+                "first_name": e.first_name,
+                "last_name": e.last_name,
+                "department": e.department,
+                "job_title": e.job_title,
+                "account_enabled": e.account_enabled,
+                "hire_date": e.hire_date.isoformat() if e.hire_date else None,
+                "created_at": e.created_at.isoformat() if e.created_at else None,
             }
-        finally:
-            session.close()
+            for e in employees[skip:skip + limit]
+        ],
+    }
+
+
 
 
 @app.post("/employees", status_code=201)
